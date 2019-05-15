@@ -27,6 +27,7 @@ from pandas.plotting import register_matplotlib_converters
 from pylab import *
 from matplotlib import style
 # pd.core.common.is_list_like = pd.api.types.is_list_like # necessary in some pandas versions
+# import pandas_datareader.data as web
 
 def write_to(df,name,flag):
     try:
@@ -34,7 +35,7 @@ def write_to(df,name,flag):
             df.to_csv("stock_dfs/" + str(name)+".csv")
         elif(flag=="html"):
             df.to_html(str(name)+"html")
-    except:
+    except ValueError:
         print("No other types supported")
 
 def get_tickers(tickers):
@@ -42,7 +43,7 @@ def get_tickers(tickers):
         ticker = str(ticker)
         try: 
             print(ticker)
-            quandl.ApiConfig.api_key = "M3S6cLgQ3b_czSDmKJxD"
+            quandl.ApiConfig.api_key = ""
             df = quandl.get("WIKI/" + ticker, start_date = "2015-12-31", end_date = "2018-12-31")
             write_to(df,str(ticker),"csv")
         except ValueError:
@@ -103,41 +104,41 @@ def get_features(prices):
 def create_outcomes(prices):
     outcomes = pd.DataFrame(index=prices.index)
     # next day's opening change
-    outcomes['open_1'] = prices.groupby(level='symbol').open.shift(-1)\
-                                /prices.groupby(level='symbol').close.shift(0)-1
+    outcomes['open_1'] = prices.groupby(level='symbol').open.shift(-1)/prices.groupby(level='symbol').close.shift(0)-1
     # next day's closing change
     func_one_day_ahead = lambda x: x.pct_change(-1)
-    outcomes['close_1'] = prices.groupby(level='symbol').close\
-                                .apply(func_one_day_ahead)
+    outcomes['close_1'] = prices.groupby(level='symbol').close.apply(func_one_day_ahead)
     func_five_day_ahead = lambda x: x.pct_change(-5)
-    outcomes['close_5'] = prices.groupby(level='symbol').close\
-                                .apply(func_five_day_ahead)
+    outcomes['close_5'] = prices.groupby(level='symbol').close.apply(func_five_day_ahead)
     return(outcomes)   
 
-def mach_learn(features,outcomes):
-    y = outcomes.close_1
+def mach_learn(features,outcomes,mlt):
+    y = outcomes.close_5
     X = features
+
     Xy = X.join(y).dropna()
-    y = Xy[y.name]
+
     X = Xy[X.columns]
-    # print(y.shape)
-    # print(X.shape)
-    model = RandomForestRegressor(max_features=3) # LinearRegression()
-    model.fit(X,y)
-    print("Model RSQ: "+ str(model.score(X,y)))
+    y = Xy[y.name]
 
-    print("Feature Importance: ")
-    print(pd.Series(model.feature_importances_,index=X.columns).sort_values(ascending=False)) 
-
-
-    # print("Coefficients: ")
-    # print(pd.Series(model.coef_,index=X.columns).sort_values(ascending=False))
-
+    if(mlt == 'linr'):
+        model = LinearRegression()
+        model.fit(X,y)
+        print("Model RSQ: "+ str(model.score(X,y)))
+        print("Coefficients: ")
+        print(pd.Series(model.coef_,index=X.columns).sort_values(ascending=False))
+    elif(mlt == 'rndf'):
+        model = RandomForestRegressor(max_features=3)
+        model.fit(X,y)
+        print("Model Score: "+ str(model.score(X,y)))
+        print("Feature Importance: ")
+        print(pd.Series(model.feature_importances_,index=X.columns).sort_values(ascending=False))
+    else:
+        print('No valid choice for classifier')
     
 def features_probe(features,flag):
     features.reset_index(inplace=True)
     symbs = list(set(features.symbol))
-    print(symbs)
     df = features[['symbol','volume_change_ratio']]
     if(flag == 'odd'):
         print(df[df.index % 2 != 0])
@@ -152,7 +153,5 @@ if __name__ == '__main__':
     prices = read_data(tickers,True)
     df_features = get_features(prices)
     df_outcomes = create_outcomes(prices)
-    mach_learn(df_features,df_outcomes)
-
-
+    mach_learn(df_features,df_outcomes,'lin')
 
